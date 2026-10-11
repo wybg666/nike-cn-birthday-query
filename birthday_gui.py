@@ -11,7 +11,6 @@ from queue import Empty
 
 from birthday_query import DATA, DEFAULTS, InputError, parse_accounts_text, validate_settings
 from gui_runner import QueryRunner, export_results
-from safe_log import mask_account
 
 STATUS_LABELS = {
     "success": "成功", "partial_profile": "资料不完整", "invalid_credentials": "凭据无效",
@@ -37,7 +36,6 @@ class BirthdayApp:
         self.input_window = None
         self.log_lines = 0
         self.setting_vars = {key: tk.StringVar(root, value=str(value)) for key, value in DEFAULTS.items()}
-        self.show_accounts = tk.BooleanVar(root, value=False)
         self.month_filter = tk.StringVar(root, value="全部月份")
         self.status_filter = tk.StringVar(root, value="全部状态")
         self.input_summary = tk.StringVar(root, value="尚未导入账号")
@@ -113,8 +111,16 @@ class BirthdayApp:
         self.paste_button = ttk.Button(buttons, text="粘贴账号文本", command=self.paste_accounts)
         self.paste_button.grid(row=0, column=1, sticky="ew", padx=(4, 0))
         ttk.Label(left, textvariable=self.input_summary, style="CardMuted.TLabel").grid(row=3, column=0, sticky="w", pady=(8, 5))
-        self.account_preview = tk.Listbox(left, height=5, bg="#f6f8fc", fg="#43556e", relief="flat", highlightthickness=1, highlightbackground="#dde4ee", font=("Consolas", 10), selectmode=tk.BROWSE, exportselection=False)
-        self.account_preview.grid(row=4, column=0, sticky="ew")
+        preview = ttk.Frame(left, style="Card.TFrame")
+        preview.grid(row=4, column=0, sticky="ew")
+        preview.columnconfigure(0, weight=1)
+        self.account_preview = tk.Listbox(preview, height=5, bg="#f6f8fc", fg="#43556e", relief="flat", highlightthickness=1, highlightbackground="#dde4ee", font=("Consolas", 10), selectmode=tk.BROWSE, exportselection=False)
+        self.account_preview.grid(row=0, column=0, sticky="ew")
+        preview_vertical = ttk.Scrollbar(preview, orient="vertical", command=self.account_preview.yview)
+        preview_vertical.grid(row=0, column=1, sticky="ns")
+        preview_horizontal = ttk.Scrollbar(preview, orient="horizontal", command=self.account_preview.xview)
+        preview_horizontal.grid(row=1, column=0, sticky="ew")
+        self.account_preview.configure(xscrollcommand=preview_horizontal.set, yscrollcommand=preview_vertical.set)
         account_actions = ttk.Frame(left, style="Card.TFrame")
         account_actions.grid(row=5, column=0, sticky="ew", pady=(6, 8))
         self.check_button = ttk.Button(account_actions, text="离线检查", command=self.check_inputs)
@@ -134,11 +140,11 @@ class BirthdayApp:
             field.grid(row=index, column=1, sticky="e", padx=(12, 0), pady=5)
             self.setting_widgets.append(field)
         ttk.Label(left, text="单一代理（可选，留空直连）", style="Card.TLabel").grid(row=8, column=0, sticky="w", pady=(12, 4))
-        proxy = ttk.Entry(left, textvariable=self.setting_vars["proxy"], show="*")
+        proxy = ttk.Entry(left, textvariable=self.setting_vars["proxy"])
         proxy.grid(row=9, column=0, sticky="ew")
         self.setting_widgets.append(proxy)
         ttk.Label(left, text="http(s)://[用户:密码@]主机:端口\n设置仅用于当前窗口，不自动保存。", style="CardMuted.TLabel").grid(row=10, column=0, sticky="w", pady=(5, 10))
-        ttk.Label(left, text="隐私提示\n账号密码只留在当前窗口内存中，\n不会自动写入文件。输入文件和导出\n结果仍属私人资料，请勿上传。", style="CardMuted.TLabel", justify="left").grid(row=11, column=0, sticky="sw", pady=(8, 0))
+        ttk.Label(left, text="隐私提示\n账号密码在列表中明文显示，\n不会自动写入文件。请勿分享\n包含账号密码的截图或录屏。", style="CardMuted.TLabel", justify="left").grid(row=11, column=0, sticky="sw", pady=(8, 0))
         left.rowconfigure(11, weight=1)
 
         right = ttk.Frame(body, style="Card.TFrame", padding=16)
@@ -159,13 +165,12 @@ class BirthdayApp:
         state.pack(side="left", padx=(0, 8))
         month.bind("<<ComboboxSelected>>", lambda _: self._render_rows())
         state.bind("<<ComboboxSelected>>", lambda _: self._render_rows())
-        ttk.Checkbutton(filters, text="显示完整账号", variable=self.show_accounts, command=self._render_rows).pack(side="right")
         table = ttk.Frame(right, style="Card.TFrame")
         table.grid(row=3, column=0, sticky="nsew")
         table.columnconfigure(0, weight=1)
         table.rowconfigure(0, weight=1)
         self.tree = ttk.Treeview(table, columns=("account", "month", "registered", "status"), show="headings", height=10)
-        for key, title, width in [("account", "账号（默认掩码）", 140), ("month", "生日月份", 75), ("registered", "注册时间（UTC）", 170), ("status", "状态", 130)]:
+        for key, title, width in [("account", "账号", 140), ("month", "生日月份", 75), ("registered", "注册时间（UTC）", 170), ("status", "状态", 130)]:
             self.tree.heading(key, text=title)
             self.tree.column(key, width=width, minwidth=55, anchor="center")
         self.tree.grid(row=0, column=0, sticky="nsew")
@@ -205,8 +210,10 @@ class BirthdayApp:
         parsed = parse_accounts_text(text)
         self.accounts = parsed
         self.account_preview.delete(0, "end")
-        for phone, _ in parsed:
-            self.account_preview.insert("end", mask_account(phone))
+        for phone, password in parsed:
+            self.account_preview.insert("end", phone + "----" + password)
+        self.account_preview.xview_moveto(0)
+        self.account_preview.yview_moveto(0)
         self.input_summary.set(f"已导入 {len(parsed)} 个账号 · {source}")
         self.status_text.set("账号格式检查通过；密码是否有效尚未验证" + ("；结果表仍是上轮结果" if self.rows else ""))
         self._append_log(f"已导入 {len(parsed)} 个账号，未登录。")
@@ -374,10 +381,9 @@ class BirthdayApp:
             if state_filter == "失败" and status in ("success", "partial_profile", "cancelled"):
                 continue
             account = row.get("account", "")
-            visible_account = account if self.show_accounts.get() else mask_account(account)
             registered = row.get("registration_time") or "—"
             registered = registered.replace("T", " ").replace("+00:00", "")
-            self.tree.insert("", "end", values=(visible_account, f"{month:02d} 月" if month else "未知", registered, STATUS_LABELS.get(status, "处理异常")), tags=(status if status in ("success", "partial_profile") else "error",))
+            self.tree.insert("", "end", values=(account, f"{month:02d} 月" if month else "未知", registered, STATUS_LABELS.get(status, "处理异常")), tags=(status if status in ("success", "partial_profile") else "error",))
             shown += 1
         self.visible_text.set(f"显示 {shown} / {len(self.rows)} 条 · 导出包含全部结果（不受筛选影响）")
         success = sum(row.get("status") == "success" for row in self.rows)
@@ -392,7 +398,7 @@ class BirthdayApp:
             row = event["row"]
             self.rows.append(row)
             self._render_rows()
-            self._append_log(mask_account(row["account"]) + " · " + STATUS_LABELS.get(row["status"], "处理异常"))
+            self._append_log(row["account"] + " · " + STATUS_LABELS.get(row["status"], "处理异常"))
         elif kind == "progress":
             completed, total = event["completed"], event["total"]
             self.progress.configure(maximum=max(1, total), value=completed)
