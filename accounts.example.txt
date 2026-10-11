@@ -1,0 +1,3 @@
+# Copy this file to data/accounts.txt. Only use your own or authorized accounts.
+# Replace placeholders before --check / --execute; do not upload this private file.
+# PHONE----PASSWORD

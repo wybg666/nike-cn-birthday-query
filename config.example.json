@@ -1,0 +1,7 @@
+{
+  "workers": 1,
+  "timeout_seconds": 15,
+  "retry_count": 0,
+  "request_delay_seconds": 1.0,
+  "proxy": ""
+}

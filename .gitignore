@@ -1,0 +1,13 @@
+data/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.env.*
+*.log
+*.csv
+*.exe
+*.zip
+build/
+dist/
